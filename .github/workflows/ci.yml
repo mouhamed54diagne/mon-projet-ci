@@ -1,114 +1,81 @@
-name: CI Pipeline Multi-Stage
+# Name of the workflow, shown in GitHub's Actions tab
+name: CI Pipeline
 
-# Déclencheurs du workflow
+# When to run this workflow
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - main  # Runs when you push to the main branch
   pull_request:
-    branches: [ main, master ]
+    branches:
+      - main  # Runs when you create a pull request to main
 
-# Variables globales
-env:
-  NODE_ENV: test
-
+# Jobs to run
 jobs:
-  # Job principal avec matrice
-  ci:
-    name: CI (${{ matrix.os }}, Node ${{ matrix.node-version }})
-    runs-on: ${{ matrix.os }}
-    
+  # Job 1: Lint (checks code style)
+  lint:
+    name: Lint  # Name shown in GitHub Actions
+    runs-on: ${{ matrix.os }}  # Run on different operating systems
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        node-version: [16, 18]  # Test on Node.js versions 16 and 18
+        os: [ubuntu-latest, windows-latest]  # Test on Ubuntu and Windows
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4  # Gets your project code from GitHub
+      - name: Set up Node.js
+        uses: actions/setup-node@v4  # Sets up Node.js
+        with:
+          node-version: ${{ matrix.node-version }}  # Uses Node.js 16 or 18
+          cache: 'npm'  # Saves node_modules to speed up future runs
+      - name: Install dependencies
+        run: npm ci  # Installs node_modules based on package-lock.json
+      - name: Run lint
+        run: npm run lint  # Runs your linter (e.g., ESLint)
+
+  # Job 2: Test (runs your tests)
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
         node-version: [16, 18]
-      fail-fast: false
-
+        os: [ubuntu-latest, windows-latest]
     steps:
-    # 1. Récupérer le code source
-    - name: 📥 Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm test  # Runs your tests (e.g., Jest, Mocha)
 
-    # 2. Configurer Node.js
-    - name: 🔧 Setup Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-
-    # 3. Cache avancé pour les dépendances
-    - name: 💾 Cache node modules
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.npm
-          node_modules
-        key: ${{ runner.os }}-node-${{ matrix.node-version }}-${{ hashFiles('**/package-lock.json') }}
-        restore-keys: |
-          ${{ runner.os }}-node-${{ matrix.node-version }}-
-          ${{ runner.os }}-node-
-
-    # 4. Installation des dépendances
-    - name: 📦 Install dependencies
-      run: npm ci
-
-    # 5. STAGE LINT - Vérification du code
-    - name: 🔍 Run ESLint
-      run: npm run lint
-
-    # 6. STAGE TEST - Exécution des tests
-    - name: 🧪 Run tests
-      run: npm run test
-
-    # 7. STAGE COVERAGE - Génération du rapport de couverture
-    - name: 📊 Generate test coverage
-      run: npm run test:coverage
-      continue-on-error: true
-
-    # 8. STAGE BUILD - Construction du projet
-    - name: 🏗️ Build project
-      run: npm run build
-      if: success() # Ne build que si tout le reste a réussi
-
-    # 9. Upload des artifacts de build
-    - name: 📤 Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-artifacts-${{ matrix.os }}-node${{ matrix.node-version }}
-        path: |
-          dist/
-          package.json
-        retention-days: 7
-      if: success()
-
-    # 10. Upload des rapports de couverture
-    - name: 📈 Upload coverage reports
-      uses: actions/upload-artifact@v4
-      with:
-        name: coverage-report-${{ matrix.os }}-node${{ matrix.node-version }}
-        path: coverage/
-        retention-days: 7
-      if: always() # Upload même si les tests échouent
-
-  # Job de synthèse
-  build-summary:
-    name: 📋 Build Summary
-    runs-on: ubuntu-latest
-    needs: ci
-    if: always()
-    
+  # Job 3: Build (builds your project and saves the output)
+  build:
+    name: Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        node-version: [16, 18]
+        os: [ubuntu-latest, windows-latest]
     steps:
-    - name: 📊 Job Summary
-      run: |
-        echo "## 🎯 CI Pipeline Results" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| Stage | Status |" >> $GITHUB_STEP_SUMMARY
-        echo "|-------|---------|" >> $GITHUB_STEP_SUMMARY
-        echo "| Lint | ${{ needs.ci.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Test | ${{ needs.ci.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Build | ${{ needs.ci.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 🏗️ Matrix Build Results:" >> $GITHUB_STEP_SUMMARY
-        echo "- Ubuntu + Node 16" >> $GITHUB_STEP_SUMMARY
-        echo "- Ubuntu + Node 18" >> $GITHUB_STEP_SUMMARY  
-        echo "- Windows + Node 16" >> $GITHUB_STEP_SUMMARY
-        echo "- Windows + Node 18" >> $GITHUB_STEP_SUMMARY
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run build
+        run: npm run build  # Builds your project (e.g., creates dist/ folder)
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4  # Saves the build output
+        with:
+          name: build-artifacts-${{ matrix.os }}-${{ matrix.node-version }}  # Unique name for artifacts
+          path: dist/  # Folder where build output is saved (change if different)
